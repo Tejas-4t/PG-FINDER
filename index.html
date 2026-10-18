@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Karvenagar PG Finder</title>
+
+    <link rel="stylesheet" href="pg.css">
+
+    <!-- Google Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+
+    <!-- ================= NAVBAR ================= -->
+
+    <header class="navbar">
+
+        <div class="logo">
+            <div class="logo-icon">⌂</div>
+
+            <div>
+                <h2>PG<span>Finder</span></h2>
+                <small>Karvenagar</small>
+            </div>
+        </div>
+
+
+        <nav>
+            <a href="#" class="active">Home</a>
+            <a href="#pgs">Find PG</a>
+            <a href="#about">About</a>
+            <a href="#contact">Contact</a>
+
+            <button class="owner-btn">
+                Owner Login
+            </button>
+        </nav>
+
+    </header>
+
+
+    <!-- ================= HERO ================= -->
+
+    <section class="hero">
+
+        <div class="hero-content">
+
+            <div class="small-badge">
+                ✦ KARVENAGAR'S PG DISCOVERY PLATFORM
+            </div>
+
+            <h1>
+                Find a place
+                <br>
+                <span>you'll call home.</span>
+            </h1>
+
+            <p>
+                Discover trusted PGs in Karvenagar with transparent
+                pricing, real facilities and everything you need
+                before you visit.
+            </p>
+
+
+            <!-- SEARCH BOX -->
+
+            <div class="search-box">
+
+                <div class="search-item">
+
+                    <div class="search-icon">
+                        📍
+                    </div>
+
+                    <div>
+                        <label>Location</label>
+                        <p>Karvenagar, Pune</p>
+                    </div>
+
+                </div>
+
+
+                <div class="divider"></div>
+
+
+                <div class="search-item">
+
+                    <div class="search-icon">
+                        💰
+                    </div>
+
+                    <div>
+                        <label>Budget</label>
+                        <p>Any budget</p>
+                    </div>
+
+                </div>
+
+
+                <div class="divider"></div>
+
+
+                <div class="search-item">
+
+                    <div class="search-icon">
+                        🛏️
+                    </div>
+
+                    <div>
+                        <label>Room Type</label>
+                        <p>Any sharing</p>
+                    </div>
+
+                </div>
+
+
+                <button class="search-btn">
+                    Search PGs →
+                </button>
+
+            </div>
+
+
+            <!-- QUICK FILTERS -->
+
+            <div class="quick-filters">
+
+                <span>Popular:</span>
+
+                <button type="button" data-filter="rent-5k-8k">₹5k - ₹8k</button>
+                <button type="button" data-filter="single">Single Sharing</button>
+                <button type="button" data-filter="food">Food Included</button>
+                <button type="button" data-filter="wifi">Wi-Fi</button>
+
+            </div>
+
+        </div>
+
+
+        <!-- HERO DECORATION -->
+
+        <div class="hero-decoration">
+
+            <div class="circle circle-one"></div>
+            <div class="circle circle-two"></div>
+
+            <div class="floating-card">
+
+                <div class="mini-icon">
+                    ✓
+                </div>
+
+                <div>
+                    <strong>Verified PGs</strong>
+                    <small>Information you can trust</small>
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- ================= STATS ================= -->
+
+    <section class="stats">
+
+        <div>
+            <strong id="statListings">–</strong>
+            <span>PG Listings</span>
+        </div>
+
+        <div>
+            <strong id="statBeds">–</strong>
+            <span>Available Beds</span>
+        </div>
+
+        <div>
+            <strong>25+</strong>
+            <span>Facilities</span>
+        </div>
+
+        <div>
+            <strong>100%</strong>
+            <span>Karvenagar Focused</span>
+        </div>
+
+    </section>
+
+
+    <!-- ================= PG SECTION ================= -->
+
+    <section class="pg-section" id="pgs">
+
+        <div class="section-heading">
+
+            <div>
+                <span class="section-label">EXPLORE</span>
+
+                <h2>
+                    Popular PGs in
+                    <span>Karvenagar</span>
+                </h2>
+            </div>
+
+            <a href="#">
+                View all PGs →
+            </a>
+
+        </div>
+
+
+        <div class="pg-grid" id="pgGrid" aria-live="polite">
+
+            <!-- PG cards are loaded from Supabase by pg.js -->
+            <p class="grid-message">Loading PGs…</p>
+
+        </div>
+
+    </section>
+
+
+    <!-- ================= WHY SECTION ================= -->
+
+    <section class="why" id="about">
+
+        <div class="why-text">
+
+            <span class="section-label">
+                WHY PG FINDER?
+            </span>
+
+            <h2>
+                Stop visiting
+                <span>every PG.</span>
+            </h2>
+
+            <p>
+                Compare everything you need in one place before
+                you step outside. Save time, compare prices and
+                find a PG that actually fits your needs.
+            </p>
+
+        </div>
+
+
+        <div class="features">
+
+            <div class="feature">
+                <div>🔍</div>
+                <h3>Easy Search</h3>
+                <p>Find PGs based on your budget and preferences.</p>
+            </div>
+
+            <div class="feature">
+                <div>⚖️</div>
+                <h3>Compare PGs</h3>
+                <p>Compare rent, rooms and facilities easily.</p>
+            </div>
+
+            <div class="feature">
+                <div>✓</div>
+                <h3>Verified Info</h3>
+                <p>Get information directly from PG owners.</p>
+            </div>
+
+            <div class="feature">
+                <div>📍</div>
+                <h3>Local Focus</h3>
+                <p>Built specifically for students in Karvenagar.</p>
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- ================= OWNER CTA ================= -->
+
+    <section class="owner-section">
+
+        <div>
+
+            <span class="section-label">
+                FOR PG OWNERS
+            </span>
+
+            <h2>
+                Have a PG in Karvenagar?
+            </h2>
+
+            <p>
+                List your PG and help students discover your
+                property without endless phone calls.
+            </p>
+
+        </div>
+
+        <button>
+            List Your PG →
+        </button>
+
+    </section>
+
+
+    <!-- ================= FOOTER ================= -->
+
+    <footer id="contact">
+
+        <div class="footer-logo">
+            <h2>PG<span>Finder</span></h2>
+            <p>
+                Making PG hunting easier for students
+                in Karvenagar.
+            </p>
+        </div>
+
+
+        <div>
+            <h4>Explore</h4>
+            <a href="#">Find PGs</a>
+            <a href="#">Popular PGs</a>
+            <a href="#">Compare</a>
+        </div>
+
+
+        <div>
+            <h4>For Owners</h4>
+            <a href="#">Owner Login</a>
+            <a href="#">List Your PG</a>
+            <a href="#">Manage Listing</a>
+        </div>
+
+
+        <div>
+            <h4>Location</h4>
+            <p>📍 Karvenagar</p>
+            <p>Pune, Maharashtra</p>
+        </div>
+
+    </footer>
+
+
+    <div class="copyright">
+        © 2026 PG Finder — Karvenagar. Built for students.
+    </div>
+
+<!-- Supabase client library (v2.117.2, a local copy so nothing depends on a CDN) -->
+<script src="supabase-js-2.117.2.js"></script>
+<!-- Your project URL + PUBLISHABLE key (safe for browsers). Never put a secret key there. -->
+<script src="supabase-config.js"></script>
+<script src="pg.js"></script>
+
+</body>
+</html>
