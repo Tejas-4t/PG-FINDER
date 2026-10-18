@@ -8,6 +8,7 @@
     <title>Karvenagar PG Finder</title>
 
     <link rel="stylesheet" href="pg.css">
+    <link rel="stylesheet" href="moderation.css">
 
     <!-- Google Font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -39,8 +40,8 @@
             <a href="#about">About</a>
             <a href="#contact">Contact</a>
 
-            <button class="owner-btn">
-                Owner Login
+            <button class="owner-btn" data-open-listing>
+                List My PG
             </button>
         </nav>
 
@@ -305,8 +306,8 @@
 
         </div>
 
-        <button>
-            List Your PG →
+        <button data-open-listing>
+            List My PG →
         </button>
 
     </section>
@@ -335,9 +336,8 @@
 
         <div>
             <h4>For Owners</h4>
-            <a href="#">Owner Login</a>
-            <a href="#">List Your PG</a>
-            <a href="#">Manage Listing</a>
+            <button class="footer-action" data-open-listing>Request to List</button>
+            <button class="footer-action" id="adminLoginButton">Admin Login</button>
         </div>
 
 
@@ -359,6 +359,7 @@
 <!-- Your project URL + PUBLISHABLE key (safe for browsers). Never put a secret key there. -->
 <script src="supabase-config.js"></script>
 <script src="pg.js"></script>
+<script src="moderation.js"></script>
 
 </body>
 </html>
