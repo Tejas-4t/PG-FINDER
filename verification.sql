@@ -5,11 +5,11 @@ insert into public.pg_listing_requests(id,requester_name,requester_email,name,ad
 values('df396822-5b25-4410-a591-60e57773a978','Test Owner','test@example.com','Image verification fixture','Test property address','Karvenagar','Pune','0000000000',5000,'single',2,1,'{}','Test only','{}',array['df396822-5b25-4410-a591-60e57773a978/1.webp','df396822-5b25-4410-a591-60e57773a978/2.webp','df396822-5b25-4410-a591-60e57773a978/3.webp']);
 do $$ begin
  if not private.pg_image_upload_allowed('df396822-5b25-4410-a591-60e57773a978/1.webp') then raise exception 'Reserved upload denied'; end if;
- if private.pg_image_upload_allowed('df396822-5b25-4410-a591-60e57773a978/4.webp') or private.pg_image_upload_allowed('df396822-5b25-4410-a591-60e57773a977/1.webp') then raise exception 'Unreserved slot allowed'; end if;
+ if private.pg_image_upload_allowed('df396822-5b25-4410-a591-60e57773a978/6.webp') or private.pg_image_upload_allowed('df396822-5b25-4410-a591-60e57773a977/1.webp') then raise exception 'Unreserved slot allowed'; end if;
  if private.pg_image_read_allowed('df396822-5b25-4410-a591-60e57773a978/1.webp') then raise exception 'Pending image leaked'; end if;
  begin perform 1 from public.pg_listing_requests; raise exception 'Anonymous request read allowed'; exception when insufficient_privilege then null; end;
  begin perform public.admin_trash_pg('df396822-5b25-4410-a591-60e57773a978',now(),false); raise exception 'Anonymous admin RPC allowed'; exception when insufficient_privilege then null; end;
- begin insert into storage.objects(bucket_id,name) values('pg-listing-images','df396822-5b25-4410-a591-60e57773a978/4.webp'); raise exception 'Fourth image allowed'; exception when insufficient_privilege then null; end;
+ begin insert into storage.objects(bucket_id,name) values('pg-listing-images','df396822-5b25-4410-a591-60e57773a978/6.webp'); raise exception 'Sixth image allowed'; exception when insufficient_privilege then null; end;
 end $$;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000000',true);
@@ -46,5 +46,5 @@ do $$ begin
  if private.pg_image_read_allowed('df396822-5b25-4410-a591-60e57773a978/1.webp') then raise exception 'Unpublished photo readable';end if;
 end $$;
 reset role;
-select 'PASS: reserved slots, maximum three, private requests/photos, nonadmin denial, incomplete approval protection, approve, edit, trash, restore' as verification;
+select 'PASS: reserved slots, maximum five, private requests/photos, nonadmin denial, incomplete approval protection, approve, edit, trash, restore' as verification;
 rollback;

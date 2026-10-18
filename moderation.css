@@ -18,3 +18,5 @@
 .admin-mode{display:flex;gap:8px;margin:16px 0}.admin-mode button,.manage-actions button{padding:10px 14px;cursor:pointer}.manage-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.danger-button{color:#a51f31}.retained-photo{display:flex;align-items:center;gap:8px;margin:8px 0}.retained-photo img{width:96px;height:72px;object-fit:cover}.custom-modal .edit-dialog{max-width:780px}.custom-modal.edit-layer{z-index:10001}.form-status.error{white-space:pre-line}
 
 .photo-links>.pg-carousel{width:100%}
+
+.room-option{border:1px solid #d8e1db;border-radius:10px;padding:0 14px 12px;margin:10px 0}.room-counts[hidden]{display:none!important}.room-availability{display:grid;gap:8px;margin:12px 0}.room-availability>div{padding:9px 12px;background:#edf5ef;border-radius:8px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;font-size:13px}.room-availability span{color:#52675d}.room-options legend{font-size:18px}

@@ -22,7 +22,8 @@ No Node build, package installation or custom application server is required. Gi
 | `supabase-js-2.117.2.js` | Vendored browser Supabase SDK. | Deliberate SDK upgrades followed by auth, query and storage testing. |
 | `listing-approval.sql` | Original one-time incremental migration: admin membership, private requests, approval trigger, grants and policies. | Historical migration reference; do not rerun on the live database. |
 | `images-admin.sql` | Second one-time migration: private upload bucket, three-photo validation, upload/read policies, approval upload checks, admin edit/Trash RPCs and deleted-listing protection. | Historical migration reference; use a new migration for later changes. |
-| `verification.sql` | Transactional role and workflow tests for uploads, privacy, approval and admin management. All fixture rows roll back. | Review and adapt for a development database. Requires a real admin UUID/profile, currently configured for this project. |
+| `sharing-options.sql` | Third migration: multiple sharing types with bed counts per type, derived legacy totals, and a five-image limit. | Apply after images-admin.sql; do not rerun. |
+| `verification.sql` | Transactional role and workflow tests for uploads, privacy, approval and admin management. Historical three-image-release checks; not run for the sharing/five-image update. All fixture rows roll back. | Review and adapt for a development database. Requires a real admin UUID/profile, currently configured for this project. |
 | `README.md` | Architecture, file guide, operating instructions, setup, security and limits. | Keep aligned with behavior and migrations. |
 
 Script order is the SDK, configuration, `photos.js`, `pg.js`, then `moderation.js`. These are classic scripts with shared helpers, not independent modules.
@@ -30,16 +31,20 @@ Script order is the SDK, configuration, `photos.js`, `pg.js`, then `moderation.j
 ## Submitting a PG
 
 1. Choose **List My PG** in the navigation/owner section, or **Request to List** in the footer.
-2. Enter your name and email (private to admins), property name/address, public phone number, rent, room sharing, beds, facilities and description.
-3. Supply **one to three images total**, using uploads, HTTPS links, or a mixture.
+2. Enter your name and email (private to admins), property name/address, public phone number, rent, all offered sharing types, total/available beds for each type, facilities and description.
+3. Supply **one to five images total**, using uploads, HTTPS links, or a mixture.
 4. Confirm you have permission to publish the property information and photos, then select **Send for Approval**.
 5. A successful submission displays a reference and waits for admin approval. It is not public yet.
 
 If a network failure interrupts a submission, keep the tab open and use **Retry Upload**. The original details and prepared photos are locked in memory so retrying cannot accidentally change the request or duplicate its listing. Closing/reloading the tab loses this retry state. Upload reservations expire after 24 hours; incomplete requests cannot be approved.
 
+### Sharing options
+
+Select any combination of Single, Double and Triple Sharing. Every selected type has its own total beds and available beds; availability cannot exceed that type’s total. The listing’s overall bed counts are calculated automatically. Cards, details, admin reviews and the admin editor show the breakdown. The Single Sharing filter includes properties offering single rooms alongside other types. Existing records retain their original type and counts until edited. Monthly rent remains a single listing-level amount.
+
 ### Image rules
 
-- Maximum **3 images per listing**, including existing images and new image links/uploads.
+- Maximum **5 images per listing**, including existing images and new image links/uploads.
 - Maximum **5 MiB (5 × 1024 × 1024 bytes)** per uploaded source file; the UI labels this 5 MB. The storage bucket also caps each stored object at 5 MiB.
 - JPEG, PNG, WebP, GIF, AVIF and BMP are accepted when the browser can decode them. Unsupported, empty, corrupt or excessively large-dimension images get an error. HEIC/SVG are not accepted; export to JPEG or PNG.
 - Uploads are resized to a maximum 1600-pixel longest edge and converted to WebP at 80% quality. Animated images become a still frame. Canvas conversion avoids preserving original camera metadata.
@@ -56,7 +61,7 @@ Use **Admin Login** in the footer. Sign in using an application user from this S
 **Manage Listings** shows published and unpublished properties. You can:
 
 - **View** the public-style detail page.
-- **Edit** property details, rent, sharing, beds, facilities, description, publication state and photos. Remove an existing photo to replace it; the combined limit remains three.
+- **Edit** property details, rent, sharing, beds, facilities, description, publication state and photos. Remove an existing photo to replace it; the combined limit remains five.
 - **Delete** after an on-screen confirmation. This moves the listing to **Trash**, marks it unpublished and removes it from the public site.
 - **Restore** from Trash. Restored listings are intentionally unpublished; use Edit and enable Published to put one back on the homepage.
 
@@ -73,10 +78,10 @@ The browser's publishable key is public by design. Authorization is enforced by 
 | `auth.users` / `public.profiles` | Application identity and existing profile records. Approved listings reference the reviewing admin's profile. |
 | `public.pg_admins` | Admin allowlist. Authenticated users can read only their own membership, not grant access. |
 | `public.pg_listing_requests` | Private requester details, property submission, photo URLs/paths, review decision and publication reference. Visitors can insert only submission columns; only admins read/review. |
-| `public.pgs` | Public property data, `photo_urls`, `photo_paths`, publication flag and `deleted_at`. Public queries exclude unpublished/deleted rows. Admins can read all. |
+| `public.pgs` | Public property data, `room_options` (type/total/available array), `photo_urls`, `photo_paths`, publication flag and `deleted_at`. Public queries exclude unpublished/deleted rows. Admins can read all. |
 | `public.pg_photos` / `pg-photos` | Legacy related storage photos and the existing public bucket. New uploads use the separate private bucket. |
 | `pg-listing-images` | Private bucket, WebP only, maximum stored object size 5 MiB. |
-| `private.pg_image_upload_allowed` | Allows a visitor to INSERT only the exact one-to-three paths reserved by a pending request less than 24 hours old. Random request UUIDs serve as unguessable upload capabilities. Admins may insert images for edits. |
+| `private.pg_image_upload_allowed` | Allows a visitor to INSERT only the exact one-to-five paths reserved by a pending request less than 24 hours old. Random request UUIDs serve as unguessable upload capabilities. Admins may insert images for edits. |
 | `private.pg_image_read_allowed` | Allows admins to preview pending images; public reads only when a published, non-deleted PG references the path. |
 | `private.review_pg_listing` | Checks admin membership and complete uploaded objects, then publishes an approved request atomically. |
 | `public.admin_save_pg` | Admin-only RPC with explicit editable fields, concurrency check and photo validation. Cannot change owner/admin membership or verification. |
@@ -88,7 +93,7 @@ The browser obtains signed image URLs valid for one hour. Unpublishing/deleting 
 
 ## Storage and free-tier operation
 
-Compression reduces storage and bandwidth use; three photos and the 5 MB source limit do not guarantee unlimited free usage. Keep the project on its current plan and monitor **Supabase Usage** for storage, bandwidth and database limits. Actual capacity depends on compressed file sizes, visitor traffic and current plan allowances.
+Compression reduces storage and bandwidth use; five photos and the 5 MB source limit do not guarantee unlimited free usage. Keep the project on its current plan and monitor **Supabase Usage** for storage, bandwidth and database limits. Actual capacity depends on compressed file sizes, visitor traffic and current plan allowances.
 
 Rejected/incomplete request photos, replaced photos and Trash images are retained. A trusted maintainer should periodically inspect unused objects before deleting them through the Storage dashboard. Do not delete an object referenced by an active property or a recoverable record you intend to keep. Storage cleanup is not automatic. Public submissions have validation and a honeypot, but no CAPTCHA/server rate limiter; add abuse controls before promoting the form widely.
 
@@ -112,7 +117,7 @@ node --check moderation.js
 
 ## Database setup and changes
 
-Both migrations are incremental and one-time. They require the original `pgs`, `pg_photos`, `profiles`, authentication and storage setup; this repo does not contain a complete empty-database bootstrap. For a new instance, obtain the base schema/policies/profile creation behavior from the project maintainer or backup, apply `listing-approval.sql`, then `images-admin.sql`, configure the public URL/key and provision an authorized admin.
+The migrations are incremental and one-time. They require the original `pgs`, `pg_photos`, `profiles`, authentication and storage setup; this repo does not contain a complete empty-database bootstrap. For a new instance, obtain the base schema/policies/profile creation behavior from the project maintainer or backup, apply `listing-approval.sql`, then `images-admin.sql`, then `sharing-options.sql`, configure the public URL/key and provision an authorized admin.
 
 For admin provisioning, identify the intended Authentication user, ensure a matching `profiles` record, then add their UUID to `pg_admins` in a trusted database session. Never disable RLS to work around access failures. Password setup/recovery is handled separately through Supabase Authentication; this site has no password-reset UI.
 
@@ -125,7 +130,7 @@ The existing Vercel project `pg-finder` in Tejas's workspace tracks `Tejas-4t/PG
 | Problem | Check |
 | --- | --- |
 | Listings fail to load | Supabase availability, public URL/key, columns/relationships and RLS. Do not rerun historical migrations blindly. |
-| Upload validation fails | At most three total images, each upload at most 5 MB, accepted format, valid image contents. |
+| Upload validation fails | At most five total images, each upload at most 5 MB, accepted format, valid image contents. |
 | Submission stalls/fails | Keep the tab open and Retry Upload. Check connection, bucket availability/quota and storage policies. Incomplete uploads cannot be approved. |
 | Photo is unavailable | For external links, use a direct public image URL. For uploads, refresh signed URLs and inspect bucket permissions/object existence. |
 | Admin sign-in fails | Use the application user's email/password, not the Supabase dashboard login. |

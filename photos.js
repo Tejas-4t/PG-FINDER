@@ -2,7 +2,7 @@
 const PG_IMAGE_BUCKET = 'pg-listing-images';
 const PG_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 function validateImageFiles(files, existingCount = 0) {
-    if (files.length + existingCount > 3) throw new Error('A PG can have a maximum of 3 images. Remove an image before adding another.');
+    if (files.length + existingCount > 5) throw new Error('A PG can have a maximum of 5 images. Remove an image before adding another.');
     for (const file of files) {
         if (file.size > PG_MAX_IMAGE_BYTES) throw new Error(file.name + ' exceeds 5 MB. Choose a smaller image.');
         if (!file.size) throw new Error(file.name + ' is empty. Choose another image.');

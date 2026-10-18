@@ -32,6 +32,35 @@
     function input(id, label, type, attributes = '') {
         return '<div><label for="' + id + '">' + label + '</label><input id="' + id + '" name="' + id + '" type="' + type + '" ' + attributes + ' required></div>';
     }
+    function makeRoomFields(container, prefix, initial = []) {
+        container.innerHTML = '<fieldset class="room-options"><legend>Sharing options</legend><p class="field-help">Select every room type you offer. Enter total and available beds separately for each selected type.</p>' + Object.entries(SHARING_LABELS).map(([type,label]) =>
+            '<div class="room-option"><label><input type="checkbox" name="' + prefix + '-type" value="' + type + '">' + label + '</label><div class="form-grid room-counts" hidden>' +
+            input(prefix+'-'+type+'-total',label+' — total beds','number','min="1" max="10000" step="1"') +
+            input(prefix+'-'+type+'-available',label+' — available beds','number','min="0" max="10000" step="1"') + '</div></div>'
+        ).join('') + '</fieldset>';
+        function sync() {
+            container.querySelectorAll('.room-option').forEach(row => {
+                const selected=row.querySelector('[type=checkbox]').checked;
+                row.querySelector('.room-counts').hidden=!selected;
+                row.querySelectorAll('[type=number]').forEach(field => {field.disabled=!selected;field.required=selected;});
+            });
+        }
+        container.querySelectorAll('[type=checkbox]').forEach(box => {
+            const room=initial.find(room=>room.type===box.value);box.checked=!!room;
+            if(room) {document.getElementById(prefix+'-'+box.value+'-total').value=room.total_beds;document.getElementById(prefix+'-'+box.value+'-available').value=room.available_beds;}
+            box.addEventListener('change',sync);
+        });
+        sync();return {sync};
+    }
+    function readRoomFields(container,prefix) {
+        const rooms=[...container.querySelectorAll('[type=checkbox]:checked')].map(box => ({type:box.value,total_beds:Number(document.getElementById(prefix+'-'+box.value+'-total').value),available_beds:Number(document.getElementById(prefix+'-'+box.value+'-available').value)}));
+        if(!rooms.length)throw new Error('Select at least one sharing option.');
+        for(const room of rooms) {
+            if(!Number.isInteger(room.total_beds)||room.total_beds<1||room.total_beds>10000||!Number.isInteger(room.available_beds)||room.available_beds<0||room.available_beds>room.total_beds)throw new Error(SHARING_LABELS[room.type]+': available beds must be between zero and total beds.');
+        }
+        if(rooms.reduce((sum,room)=>sum+room.total_beds,0)>10000)throw new Error('Total beds across all sharing types cannot exceed 10,000.');
+        return {room_options:rooms,sharing_type:rooms[0].type,total_beds:rooms.reduce((sum,room)=>sum+room.total_beds,0),available_beds:rooms.reduce((sum,room)=>sum+room.available_beds,0)};
+    }
     const listingModal = makeDialog('listingRequest', 'List My PG', `
         <p>Send your property details for review. Your listing will appear only after an admin approves it.</p>
         <form id="listingRequestForm">
@@ -46,19 +75,19 @@
             ${input('requestArea', 'Area', 'text', 'value="Karvenagar" minlength="2" maxlength="100"')}
             ${input('requestCity', 'City', 'text', 'value="Pune" minlength="2" maxlength="100"')}
             ${input('requestRent', 'Monthly rent (₹)', 'number', 'min="1" max="1000000" step="1"')}
-            <div><label for="requestSharing">Room type</label><select id="requestSharing" name="requestSharing" required><option value="">Select sharing</option><option value="single">Single Sharing</option><option value="double">Double Sharing</option><option value="triple">Triple Sharing</option></select></div>
-            ${input('requestTotalBeds', 'Total beds', 'number', 'min="1" max="10000" step="1"')}
-            ${input('requestAvailableBeds', 'Available beds', 'number', 'min="0" max="10000" step="1"')}
+            <div class="wide" id="requestRooms"></div>
           </div></fieldset>
           <fieldset><legend>Facilities</legend><div class="facility-options">${Object.entries(FACILITY_LABELS).map(([value, label]) => '<label><input type="checkbox" name="facility" value="' + value + '">' + label + '</label>').join('')}</div></fieldset>
           <label for="requestDescription">Description</label><textarea id="requestDescription" name="requestDescription" maxlength="2000" rows="3" placeholder="Food, house rules, nearby landmarks and what makes your PG special"></textarea>
-          <label for="requestFiles">Upload photos</label><input id="requestFiles" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/bmp" multiple><div id="requestPreview" class="upload-preview"></div><label for="requestPhotos">Or add photo links</label><textarea id="requestPhotos" name="requestPhotos" rows="3" maxlength="6144" placeholder="https://example.com/room.jpg"></textarea>
-          <p class="field-help">Add 1–3 images in total using uploads, HTTPS links, or both. Maximum 5 MB per uploaded image. JPEG, PNG, WebP, GIF, AVIF and BMP are supported. Uploads are resized and saved as WebP; animated images become still photos. Only share images you have permission to publish.</p>
+          <label for="requestFiles">Upload photos</label><input id="requestFiles" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/bmp" multiple><div id="requestPreview" class="upload-preview"></div><label for="requestPhotos">Or add photo links</label><textarea id="requestPhotos" name="requestPhotos" rows="3" maxlength="10240" placeholder="https://example.com/room.jpg"></textarea>
+          <p class="field-help">Add 1–5 images in total using uploads, HTTPS links, or both. Maximum 5 MB per uploaded image. JPEG, PNG, WebP, GIF, AVIF and BMP are supported. Uploads are resized and saved as WebP; animated images become still photos. Only share images you have permission to publish.</p>
           <div class="spam-trap" aria-hidden="true"><label for="requestWebsite">Leave blank</label><input id="requestWebsite" name="requestWebsite" tabindex="-1" autocomplete="off"></div>
           <label><input type="checkbox" id="requestConsent" required> I confirm these details are accurate and may be published, including the address, listing contact number and photos, after approval.</label>
           <div class="form-status" id="requestStatus" role="status" aria-live="polite"></div>
           <button class="modal-main-btn" type="submit">Send for Approval</button>
         </form>`, 'listing-dialog');
+    const requestRooms=document.getElementById('requestRooms');
+    const requestRoomControls=makeRoomFields(requestRooms,'request-room');
     const requestForm = document.getElementById('listingRequestForm');
     const requestStatus = document.getElementById('requestStatus');
     let requestId = crypto.randomUUID(), requestDraft = null;
@@ -85,20 +114,19 @@
         if (!requestDraft) {
             try {
                 validateImageFiles(files, photos.length);
-                if (photos.length + files.length < 1 || photos.some(url=>!safePhotoUrl(url)||url.length>2048)) throw new Error('Add 1–3 images using uploads or valid HTTPS image links.');
+                if (photos.length + files.length < 1 || photos.some(url=>!safePhotoUrl(url)||url.length>2048)) throw new Error('Add 1–5 images using uploads or valid HTTPS image links.');
             } catch(error) { message(requestStatus,error.message,true);return; }
         }
-        if (!requestDraft && Number(f.get('requestAvailableBeds')) > Number(f.get('requestTotalBeds'))) {
-            message(requestStatus, 'Available beds cannot exceed total beds.', true); return;
-        }
+        let roomDetails;
+        try { roomDetails=requestDraft?.payload || readRoomFields(requestRooms,'request-room'); }
+        catch(error) {message(requestStatus,error.message,true);return;}
         if (f.get('requestWebsite')) { message(requestStatus, 'Unable to submit this request.', true); return; }
         if (!db) { message(requestStatus, 'The connection is unavailable. Please try again later.', true); return; }
         button.disabled = true; button.textContent = 'Sending…'; message(requestStatus, '');
         const payload = {
             id: requestId, requester_name: String(f.get('requesterName')).trim(), requester_email: String(f.get('requesterEmail')).trim(),
             name: String(f.get('requestPGName')).trim(), address: String(f.get('requestAddress')).trim(), area: String(f.get('requestArea')).trim(), city: String(f.get('requestCity')).trim(),
-            contact_phone: String(f.get('requestPhone')).trim(), monthly_rent: Number(f.get('requestRent')), sharing_type: f.get('requestSharing'),
-            total_beds: Number(f.get('requestTotalBeds')), available_beds: Number(f.get('requestAvailableBeds')), facilities: f.getAll('facility'),
+            contact_phone: String(f.get('requestPhone')).trim(), monthly_rent: Number(f.get('requestRent')), ...roomDetails, facilities: f.getAll('facility'),
             description: String(f.get('requestDescription')).trim(), photo_urls: photos
         };
         try {
@@ -115,7 +143,7 @@
             await uploadPGImages(requestDraft.payload.photo_paths, requestDraft.blobs, requestDraft.completed);
             message(requestStatus, 'Request received with all photos. Your PG is awaiting admin approval. Reference: ' + requestId.slice(0, 8));
             requestForm.querySelectorAll('input,textarea,select').forEach(el=>el.disabled=false);
-            requestForm.reset(); requestId = crypto.randomUUID(); requestDraft=null;
+            requestForm.reset(); requestRoomControls.sync(); requestId = crypto.randomUUID(); requestDraft=null;
             previewUrls.forEach(URL.revokeObjectURL); previewUrls=[];document.getElementById('requestPreview').replaceChildren();
         } catch (error) {
             console.error('[PG Finder] Submission failed', error);
@@ -203,7 +231,7 @@
     }
     function renderRequest(request) {
         const card = document.createElement('article'); card.className = 'request-card';
-        const fields = [['Requested by', request.requester_name], ['Private email', request.requester_email], ['Public phone', request.contact_phone], ['Address', [request.address,request.area,request.city].join(', ')], ['Rent', formatRent(request.monthly_rent) + ' / month'], ['Room', SHARING_LABELS[request.sharing_type]], ['Beds', request.available_beds + ' available / ' + request.total_beds + ' total'], ['Submitted', new Date(request.created_at).toLocaleString()]];
+        const fields = [['Requested by', request.requester_name], ['Private email', request.requester_email], ['Public phone', request.contact_phone], ['Address', [request.address,request.area,request.city].join(', ')], ['Rent', formatRent(request.monthly_rent) + ' / month'], ['Room', sharingSummary(request)], ['Beds by sharing', roomOptions(request).map(room=>SHARING_LABELS[room.type]+': '+room.available_beds+' available / '+room.total_beds+' total').join(' · ')], ['Submitted', new Date(request.created_at).toLocaleString()]];
         card.innerHTML = `<span class="status-badge">${esc(request.status)}</span><h3>${esc(request.name)}</h3><dl class="request-meta">${fields.map(([label,value]) => '<div><dt>' + esc(label) + '</dt><dd>' + esc(value) + '</dd></div>').join('')}</dl><p>${request.facilities.map(value => esc(FACILITY_LABELS[value] || value)).join(' · ')}</p><p>${esc(request.description)}</p><div class="photo-links"></div>`;
         card.querySelector('.photo-links').appendChild(createPhotoCarousel(sortedPhotos(request), request.name));
         const missingPhotos = (request.uploaded_photos || []).some(photo=>photo.unavailable);
@@ -278,11 +306,12 @@
     let editor=null;
     function editPG(pg) {
         if(editor)editor.remove();
-        const fields=[['name','PG name','text','minlength="2" maxlength="100"'],['contact_phone','Public contact number','tel','pattern="[+]?[0-9 ]{10,15}"'],['address','Full address','text','minlength="5" maxlength="500"'],['area','Area','text','minlength="2" maxlength="100"'],['city','City','text','minlength="2" maxlength="100"'],['monthly_rent','Monthly rent (₹)','number','min="1" max="1000000"'],['total_beds','Total beds','number','min="1" max="10000"'],['available_beds','Available beds','number','min="0" max="10000"']];
-        editor=makeDialog('editPG','Edit Listing','<form id="editPGForm"><div class="form-grid">'+fields.map(([key,label,type,attrs])=>input('edit-'+key,label,type,attrs)).join('')+'</div><label for="edit-sharing">Room type</label><select id="edit-sharing">'+Object.entries(SHARING_LABELS).map(([value,label])=>'<option value="'+value+'">'+label+'</option>').join('')+'</select><fieldset><legend>Facilities</legend><div class="facility-options">'+Object.entries(FACILITY_LABELS).map(([value,label])=>'<label><input type="checkbox" name="editFacility" value="'+value+'">'+label+'</label>').join('')+'</div></fieldset><label for="edit-description">Description</label><textarea id="edit-description" maxlength="2000" rows="3"></textarea><label><input type="checkbox" id="edit-published"> Published on homepage</label><h3>Photos</h3><div id="edit-retained"></div><label for="edit-files">Add photos (maximum 3 total, 5 MB each)</label><input id="edit-files" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/bmp"><label for="edit-links">Add HTTPS image links, one per line</label><textarea id="edit-links" maxlength="6144"></textarea><p class="field-help">Remove an existing photo to replace it. Uploaded photos are compressed to WebP.</p><div id="edit-status" class="form-status" role="status"></div><button type="submit" class="modal-main-btn">Save Changes</button></form>','edit-dialog');
+        const fields=[['name','PG name','text','minlength="2" maxlength="100"'],['contact_phone','Public contact number','tel','pattern="[+]?[0-9 ]{10,15}"'],['address','Full address','text','minlength="5" maxlength="500"'],['area','Area','text','minlength="2" maxlength="100"'],['city','City','text','minlength="2" maxlength="100"'],['monthly_rent','Monthly rent (₹)','number','min="1" max="1000000"']];
+        editor=makeDialog('editPG','Edit Listing','<form id="editPGForm"><div class="form-grid">'+fields.map(([key,label,type,attrs])=>input('edit-'+key,label,type,attrs)).join('')+'</div><div id="edit-rooms"></div><fieldset><legend>Facilities</legend><div class="facility-options">'+Object.entries(FACILITY_LABELS).map(([value,label])=>'<label><input type="checkbox" name="editFacility" value="'+value+'">'+label+'</label>').join('')+'</div></fieldset><label for="edit-description">Description</label><textarea id="edit-description" maxlength="2000" rows="3"></textarea><label><input type="checkbox" id="edit-published"> Published on homepage</label><h3>Photos</h3><div id="edit-retained"></div><label for="edit-files">Add photos (maximum 5 total, 5 MB each)</label><input id="edit-files" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/bmp"><label for="edit-links">Add HTTPS image links, one per line</label><textarea id="edit-links" maxlength="10240"></textarea><p class="field-help">Remove an existing photo to replace it. Uploaded photos are compressed to WebP.</p><div id="edit-status" class="form-status" role="status"></div><button type="submit" class="modal-main-btn">Save Changes</button></form>','edit-dialog');
         editor.classList.add('edit-layer');
         fields.forEach(([key])=>document.getElementById('edit-'+key).value=pg[key]);
-        document.getElementById('edit-sharing').value=pg.sharing_type;
+        const editRooms=document.getElementById('edit-rooms');
+        makeRoomFields(editRooms,'edit-room',roomOptions(pg));
         document.getElementById('edit-description').value=pg.description||'';
         document.getElementById('edit-published').checked=pg.is_published;
         editor.querySelectorAll('[name=editFacility]').forEach(el=>el.checked=pg.facilities.includes(el.value));
@@ -296,8 +325,8 @@
             button.disabled=true;
             try{
                 const details={};fields.forEach(([key,,type])=>{const value=document.getElementById('edit-'+key).value.trim();details[key]=type==='number'?Number(value):value;});
-                if(details.available_beds>details.total_beds)throw new Error('Available beds cannot exceed total beds.');
-                details.sharing_type=document.getElementById('edit-sharing').value;details.description=document.getElementById('edit-description').value.trim();details.is_published=document.getElementById('edit-published').checked;details.facilities=[...editor.querySelectorAll('[name=editFacility]:checked')].map(el=>el.value);
+                Object.assign(details,readRoomFields(editRooms,'edit-room'));
+                details.description=document.getElementById('edit-description').value.trim();details.is_published=document.getElementById('edit-published').checked;details.facilities=[...editor.querySelectorAll('[name=editFacility]:checked')].map(el=>el.value);
                 const links=[...new Set(document.getElementById('edit-links').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean))];
                 if(links.some(url=>!safePhotoUrl(url)||url.length>2048))throw new Error('Use valid HTTPS image links.');
                 const files=[...document.getElementById('edit-files').files];validateImageFiles(files,retained.length+links.length);

@@ -56,7 +56,7 @@ let db = null;
 // plus the related photos from "pg_photos".
 const PG_COLUMNS =
     "id, name, description, address, area, city, contact_phone, " +
-    "monthly_rent, sharing_type, facilities, total_beds, available_beds, " +
+    "monthly_rent, sharing_type, room_options, facilities, total_beds, available_beds, " +
     "is_verified, rating, created_at, updated_at, photo_urls, photo_paths, " +
     "pg_photos ( storage_path, sort_order )";
 
@@ -75,13 +75,28 @@ const FACILITY_LABELS = {
     cctv: "📹 CCTV"
 };
 
+// The legacy fields remain derived totals for compatibility.
+function roomOptions(pg) {
+    return Array.isArray(pg.room_options) && pg.room_options.length ? pg.room_options :
+        [{type: pg.sharing_type, total_beds: pg.total_beds, available_beds: pg.available_beds}];
+}
+function sharingSummary(pg) {
+    return roomOptions(pg).map(room => SHARING_LABELS[room.type] || room.type).join(' · ');
+}
+function roomAvailabilityHTML(pg) {
+    return '<div class="room-availability">' + roomOptions(pg).map(room =>
+        '<div><strong>' + esc(SHARING_LABELS[room.type] || room.type) + '</strong><span>' +
+        esc(room.available_beds) + ' available / ' + esc(room.total_beds) + ' total beds</span></div>'
+    ).join('') + '</div>';
+}
+
 // Your existing photos are used until a PG has uploaded photos
 const FALLBACK_IMAGE_CLASSES = ["image-one", "image-two", "image-three"];
 
 // Quick filter buttons (data-filter="..." in index.html)
 const FILTERS = {
     "rent-5k-8k": function(pg) { return pg.monthly_rent >= 5000 && pg.monthly_rent <= 8000; },
-    "single":     function(pg) { return pg.sharing_type === "single"; },
+    "single":     function(pg) { return roomOptions(pg).some(room => room.type === "single"); },
     "food":       function(pg) { return pg.facilities.includes("food"); },
     "wifi":       function(pg) { return pg.facilities.includes("wifi"); }
 };
@@ -159,11 +174,12 @@ function showDetails(pg) {
 
         <div class="pg-detail-meta">
             <div><small>Rent</small><strong>${formatRent(pg.monthly_rent)} / month</strong></div>
-            <div><small>Room</small><strong>${esc(SHARING_LABELS[pg.sharing_type] || pg.sharing_type)}</strong></div>
+            <div><small>Room</small><strong>${esc(sharingSummary(pg))}</strong></div>
             <div><small>Availability</small><strong>${esc(beds)}</strong></div>
             <div><small>Status</small><strong>${pg.is_verified ? "✓ Verified" : "Not yet verified"}</strong></div>
         </div>
 
+        ${roomAvailabilityHTML(pg)}
         <div class="pg-detail-chips">
             ${pg.facilities.map(function(f) {
                 return "<span>" + esc(FACILITY_LABELS[f] || f) + "</span>";
@@ -238,9 +254,10 @@ function buildCard(pg, index) {
             </div>
 
             <div class="room-type">
-                🛏️ ${esc(SHARING_LABELS[pg.sharing_type] || pg.sharing_type)}
+                🛏️ ${esc(sharingSummary(pg))}
             </div>
 
+            ${roomAvailabilityHTML(pg)}
             <div class="facilities">
                 ${pg.facilities.map(function(f) {
                     return "<span>" + esc(FACILITY_LABELS[f] || f) + "</span>";
