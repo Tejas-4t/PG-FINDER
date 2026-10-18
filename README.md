@@ -1,171 +1,142 @@
 # PG Finder — Karvenagar
 
-A small PG (paying guest accommodation) discovery website for students in Karvenagar, Pune. Visitors can compare published properties, view rent and facilities, check bed availability, and contact the listing. Property owners can submit a listing for an administrator to review before it becomes public.
+PG Finder helps students compare paying guest accommodation in Karvenagar, Pune. Owners submit property details and photos for review. Approved listings appear on the home page. Administrators can review requests, view and edit listings, publish or unpublish them, and move listings to recoverable Trash.
 
-**Live website:** https://pg-finder-lovat.vercel.app/  
-**Source repository:** https://github.com/Tejas-4t/PG-FINDER
+- Website: https://pg-finder-lovat.vercel.app/
+- Repository: https://github.com/Tejas-4t/PG-FINDER
+- Stack: plain HTML, CSS and JavaScript; Supabase database, authentication and image storage; Vercel static hosting.
 
-## How the project works
+No Node build, package installation or custom application server is required. GitHub stores source/history, Vercel deploys `main`, and Supabase stores data independently. The site does not depend on a developer's computer staying online. The original ZIP is unnecessary and was removed; its contents remain in Git history.
 
-The frontend is plain HTML, CSS and JavaScript. There is no Node build step, React app, custom server or package installation required to serve it.
+## File guide
 
-- **GitHub** stores the source and change history.
-- **Vercel** hosts the static website and automatically deploys changes from the main branch.
-- **Supabase** provides PostgreSQL, the browser data API, admin authentication and the existing photo-storage bucket.
-- The browser uses the Supabase publishable key. Database permissions and Row Level Security (RLS), rather than hidden frontend controls, determine what each visitor can do.
-
-The site does not depend on any developer's computer remaining online. Deleting a local working copy does not delete the GitHub repository, Vercel deployment or Supabase data.
-
-## Repository file guide
-
-| File | Purpose | When to change it |
+| File | What it does | When to edit |
 | --- | --- | --- |
-| [index.html](index.html) | Main page structure: navigation, hero, listing grid, information sections, footer, stylesheet and script loading. | Change page text, section layout or navigation links. |
-| [pg.css](pg.css) | Original visual design: colours, typography, cards, hero, responsive layout and fallback property images. | Change the site's general appearance. |
-| [pg.js](pg.js) | Creates the Supabase client; fetches published PGs; builds cards and property details; displays photos; applies quick filters and updates listing/bed counts. | Change the public listing experience or public query. |
-| [moderation.css](moderation.css) | Styles for the listing request dialog, admin sign-in and review queue, status messages, form fields and photo gallery. | Change the submission/admin interface. Loaded after pg.css so its dialog rules take precedence. |
-| [moderation.js](moderation.js) | Builds the request form and admin dialogs; validates submissions; inserts pending requests; signs admins in; checks membership; loads and reviews requests. | Change submission fields, admin controls or review messages. |
-| [supabase-config.js](supabase-config.js) | Browser configuration containing the Supabase project URL and public publishable key. | Connect a different Supabase project or rotate its publishable key. Never put a secret/service-role key here. |
-| [supabase-js-2.117.2.js](supabase-js-2.117.2.js) | Vendored browser Supabase client library. Application code uses its createClient API. | Upgrade deliberately and test auth, queries and storage afterward. Keep the filename in index.html in sync. |
-| [listing-approval.sql](listing-approval.sql) | Database migration for admin membership, private listing requests, photo URLs, RLS policies, restricted writes and atomic approval/publication. | Reference the deployed database design. Make later schema changes through new migrations. |
-| [README.md](README.md) | This project overview, operating guide, setup instructions and limitations. | Update whenever behavior, setup or files change. |
+| `index.html` | Navigation, hero, public listing grid, information sections, footer and script loading. | Page text, layout, menu and footer links. |
+| `pg.css` | Original site design, typography, cards, responsive layouts and modal base styles. | Overall appearance. |
+| `pg.js` | Creates the Supabase browser client, fetches published/non-deleted properties, renders cards/details, applies quick filters and updates statistics. | Public browsing and listing queries. |
+| `photos.js` | Validates uploads, resizes/converts them to WebP, uploads immutable image slots, resolves private-storage signed URLs, and creates accessible carousels. | Image limits, formats, compression, navigation and storage behavior. |
+| `moderation.css` | Request/admin forms, messages, review cards, carousel controls, image previews and editor styles. | Submission/admin UI and photo layout. |
+| `moderation.js` | Request submission with retry state, admin sign-in and membership check, approval/rejection, listing management, editing, Trash and restore. | Owner and admin workflows. |
+| `supabase-config.js` | Supabase project URL and public publishable key. | Connect a different project or rotate the public key. Never add a secret/service-role key. |
+| `supabase-js-2.117.2.js` | Vendored browser Supabase SDK. | Deliberate SDK upgrades followed by auth, query and storage testing. |
+| `listing-approval.sql` | Original one-time incremental migration: admin membership, private requests, approval trigger, grants and policies. | Historical migration reference; do not rerun on the live database. |
+| `images-admin.sql` | Second one-time migration: private upload bucket, three-photo validation, upload/read policies, approval upload checks, admin edit/Trash RPCs and deleted-listing protection. | Historical migration reference; use a new migration for later changes. |
+| `verification.sql` | Transactional role and workflow tests for uploads, privacy, approval and admin management. All fixture rows roll back. | Review and adapt for a development database. Requires a real admin UUID/profile, currently configured for this project. |
+| `README.md` | Architecture, file guide, operating instructions, setup, security and limits. | Keep aligned with behavior and migrations. |
 
-The original files (1).zip has been removed because its five source files are now maintained directly in the repository. Vercel does not need the archive. Its original contents remain recoverable through Git history.
+Script order is the SDK, configuration, `photos.js`, `pg.js`, then `moderation.js`. These are classic scripts with shared helpers, not independent modules.
 
-### Script loading order
+## Submitting a PG
 
-index.html loads supabase-js-2.117.2.js, then supabase-config.js, then pg.js, then moderation.js. Keep this order: moderation.js uses the database client, escaping helpers, labels and listing refresh function defined in pg.js. These are classic browser scripts, not independent ES modules.
+1. Choose **List My PG** in the navigation/owner section, or **Request to List** in the footer.
+2. Enter your name and email (private to admins), property name/address, public phone number, rent, room sharing, beds, facilities and description.
+3. Supply **one to three images total**, using uploads, HTTPS links, or a mixture.
+4. Confirm you have permission to publish the property information and photos, then select **Send for Approval**.
+5. A successful submission displays a reference and waits for admin approval. It is not public yet.
 
-## Visitor and owner workflow
+If a network failure interrupts a submission, keep the tab open and use **Retry Upload**. The original details and prepared photos are locked in memory so retrying cannot accidentally change the request or duplicate its listing. Closing/reloading the tab loses this retry state. Upload reservations expire after 24 hours; incomplete requests cannot be approved.
 
-1. Browse the home page and use the rent, room-sharing, food or Wi-Fi quick filters.
-2. Open **View Details** for address, availability, facilities, photos and the listing contact number.
-3. Choose **List My PG** in the top navigation or owner section, or **Request to List** in the footer.
-4. Enter contact and property details, rent, room type, bed counts, facilities, description and photo links.
-5. Confirm permission to publish the property address, public contact number and photos, then choose **Send for Approval**.
-6. The request is stored as pending. It is not a public PG listing until an admin approves it.
+### Image rules
 
-Requester name and email stay in the private review queue. The listing phone number, address, description and approved photos are public property information.
+- Maximum **3 images per listing**, including existing images and new image links/uploads.
+- Maximum **5 MiB (5 × 1024 × 1024 bytes)** per uploaded source file; the UI labels this 5 MB. The storage bucket also caps each stored object at 5 MiB.
+- JPEG, PNG, WebP, GIF, AVIF and BMP are accepted when the browser can decode them. Unsupported, empty, corrupt or excessively large-dimension images get an error. HEIC/SVG are not accepted; export to JPEG or PNG.
+- Uploads are resized to a maximum 1600-pixel longest edge and converted to WebP at 80% quality. Animated images become a still frame. Canvas conversion avoids preserving original camera metadata.
+- Local previews appear before submission. Both listing cards and detail views have left/right controls and a photo counter when multiple photos exist. Focused galleries also support keyboard left/right arrows and mobile swipes.
+- External links must be HTTPS direct-image URLs. A sharing page may not display as an image. External images remain on their provider, so this app cannot enforce a byte-size limit on them or ensure continued availability. The 5 MB limit applies to uploaded files.
+- A single-image listing has no unnecessary navigation arrows. Missing/expired images show a retry message.
 
-### Photo links
+## Admin operation
 
-The form accepts 1–8 public HTTPS photo links, one per line. Direct links to image files work best. A private cloud-drive sharing page or a page containing a photo may not render as an image. Keep the linked images available and use photos you have permission to publish.
+Use **Admin Login** in the footer. Sign in using an application user from this Supabase project's Authentication service. Dashboard credentials are separate. The authenticated user must also have a row in `public.pg_admins`; an owner profile alone does not grant admin access.
 
-The request form currently uses photo links, not file uploads. Existing pg_photos records can still reference images in the Supabase pg-photos bucket. New approved requests store their links in pgs.photo_urls.
+**Listing Requests** shows Pending, Approved and Rejected requests, including private requester contact details and photo previews. Review the property, then **Approve & Publish** or **Reject**, optionally adding private notes. Approval inserts the public property atomically in the database and refreshes the homepage. Missing uploaded objects block approval. Approval does not automatically grant a Verified badge. Request review decisions are final; later changes to an approved property happen in Manage Listings.
 
-## Administrator workflow
+**Manage Listings** shows published and unpublished properties. You can:
 
-1. Open **Admin Login** in the website footer.
-2. Sign in with an existing **application user** in this project's Supabase Authentication and that user's password.
-3. The account must also have a row in pg_admins. A Supabase dashboard login or an owner profile alone does not grant website admin access.
-4. Review **Pending** requests, open their photo links, and check the submitted details.
-5. Add optional private review notes, then choose **Approve & Publish** or **Reject**.
-6. Use the status selector to view approved or rejected requests. Use **Refresh** for new arrivals and **Sign Out** when finished.
+- **View** the public-style detail page.
+- **Edit** property details, rent, sharing, beds, facilities, description, publication state and photos. Remove an existing photo to replace it; the combined limit remains three.
+- **Delete** after an on-screen confirmation. This moves the listing to **Trash**, marks it unpublished and removes it from the public site.
+- **Restore** from Trash. Restored listings are intentionally unpublished; use Edit and enable Published to put one back on the homepage.
 
-Approval publishes the property in the same database transaction as the review. The homepage includes it on its next data load; the approving admin's page refreshes the listing grid immediately. Other visitors already viewing the page should reload to see new data. Approval does not automatically give a property the Verified badge.
+Deletion is recoverable, not a permanent database/storage purge. Uploaded files are retained for recovery. An editor checks `updated_at` to prevent silently overwriting another admin's newer changes. On a conflict, refresh and reopen the listing.
 
-Decisions are final in the current UI: there is no edit, reopen, unpublish or delete control. A trusted database maintainer must handle corrections. Review notes and requester emails are not copied into public PG records.
+The three original example PGs were unpublished. They remain available to admins as unpublished records; the public site no longer uses them as placeholders.
 
-### Managing admin access
+## Security and data flow
 
-A project maintainer manages membership in the Supabase dashboard. Never expose an admin-grant endpoint or allow clients to edit pg_admins.
+The browser's publishable key is public by design. Authorization is enforced by database grants, RLS and guarded functions. Never expose a secret/service-role key or add browser code that grants admin membership.
 
-- Create or identify the intended account in Authentication > Users.
-- Ensure the account has a matching public.profiles row: approved listings use the reviewing admin's UUID as pgs.owner_id, which references profiles.id.
-- Add that exact user UUID to public.pg_admins using a trusted database session.
-- To revoke access, remove that membership through a trusted database session. Do not disable RLS to make the admin panel work.
-- Keep passwords out of this repository. Password setup/recovery is handled through Supabase Authentication; this website has no password-reset screen.
-
-## Database structure and security
-
-| Object | Role |
+| Object | Purpose/access |
 | --- | --- |
-| auth.users | Supabase-managed application identities and credentials. |
-| public.profiles | Existing profile records linked to auth.users. Includes the legacy student/owner role. |
-| public.pgs | Public property data, publication/verification flags, beds, facilities and photo URLs. The homepage explicitly queries is_published = true. |
-| public.pg_photos | Existing related photos using Supabase Storage paths and sort order. |
-| public.pg_listing_requests | Private submitted details, pending/approved/rejected status, review notes, reviewer/time and published property ID. |
-| public.pg_admins | Admin allowlist keyed by application user UUID. Users can only read their own membership; they cannot grant themselves access. |
-| private.valid_pg_photo_urls | Database validation helper for submitted HTTPS photo-link arrays. |
-| private.review_pg_listing | Guarded trigger function that checks admin membership and publishes approved requests atomically. |
-| pg-photos bucket | Existing public storage for legacy property photo records. |
+| `auth.users` / `public.profiles` | Application identity and existing profile records. Approved listings reference the reviewing admin's profile. |
+| `public.pg_admins` | Admin allowlist. Authenticated users can read only their own membership, not grant access. |
+| `public.pg_listing_requests` | Private requester details, property submission, photo URLs/paths, review decision and publication reference. Visitors can insert only submission columns; only admins read/review. |
+| `public.pgs` | Public property data, `photo_urls`, `photo_paths`, publication flag and `deleted_at`. Public queries exclude unpublished/deleted rows. Admins can read all. |
+| `public.pg_photos` / `pg-photos` | Legacy related storage photos and the existing public bucket. New uploads use the separate private bucket. |
+| `pg-listing-images` | Private bucket, WebP only, maximum stored object size 5 MiB. |
+| `private.pg_image_upload_allowed` | Allows a visitor to INSERT only the exact one-to-three paths reserved by a pending request less than 24 hours old. Random request UUIDs serve as unguessable upload capabilities. Admins may insert images for edits. |
+| `private.pg_image_read_allowed` | Allows admins to preview pending images; public reads only when a published, non-deleted PG references the path. |
+| `private.review_pg_listing` | Checks admin membership and complete uploaded objects, then publishes an approved request atomically. |
+| `public.admin_save_pg` | Admin-only RPC with explicit editable fields, concurrency check and photo validation. Cannot change owner/admin membership or verification. |
+| `public.admin_trash_pg` | Admin-only recoverable deletion/restore RPC with concurrency check. |
 
-Visitors have insert access only to submission fields. They cannot set approval fields or read requests. Signed-in non-admins cannot see or review the queue. Admins can read requests and update status/review notes. A guarded trigger records the reviewer and creates the public PG on approval. Legacy direct client writes to pgs and pg_photos are revoked so an owner cannot bypass review. Repeated reviews cannot publish duplicate properties.
+Public uploads have no UPDATE/DELETE rights in the new bucket and cannot overwrite approved photos. Visitors cannot list/read pending requests or pending images. Requester names, email addresses and review notes never enter public property rows. The new private bucket does not inherit the old bucket's public visibility.
 
-The publishable key is expected to be visible in a static website. It is not an administrator credential. Security depends on database grants and RLS. Do not replace it with a secret or service-role key.
+The browser obtains signed image URLs valid for one hour. Unpublishing/deleting stops new public URLs; a URL issued earlier can work until it expires. Previously downloaded images and external links cannot be revoked by the app. Reload the page if an old image URL expires.
 
-## Run the frontend locally
+## Storage and free-tier operation
 
-1. Clone or download this repository.
-2. Check supabase-config.js points to the intended project. The committed configuration connects to the live project: local form submissions would also affect that project's data.
-3. Serve the repository root over HTTP. For example, with Python 3 installed:
+Compression reduces storage and bandwidth use; three photos and the 5 MB source limit do not guarantee unlimited free usage. Keep the project on its current plan and monitor **Supabase Usage** for storage, bandwidth and database limits. Actual capacity depends on compressed file sizes, visitor traffic and current plan allowances.
 
-~~~sh
+Rejected/incomplete request photos, replaced photos and Trash images are retained. A trusted maintainer should periodically inspect unused objects before deleting them through the Storage dashboard. Do not delete an object referenced by an active property or a recoverable record you intend to keep. Storage cleanup is not automatic. Public submissions have validation and a honeypot, but no CAPTCHA/server rate limiter; add abuse controls before promoting the form widely.
+
+## Local development
+
+Download or clone the repo, then serve its root over HTTP:
+
+```sh
 python3 -m http.server 8000 --bind 127.0.0.1
-~~~
+```
 
-4. Open http://127.0.0.1:8000 in a browser. Do not rely on opening index.html as a file URL.
+Open http://127.0.0.1:8000/. There is no build/install command. Do not rely on `file://` URLs. **The committed configuration points to the live database**, so local form submissions affect live data. Use a separate development Supabase project for general development.
 
-There is no npm install or build command. Node.js is optional for JavaScript syntax checks:
+Optional syntax checks:
 
-~~~sh
+```sh
+node --check photos.js
 node --check pg.js
 node --check moderation.js
-~~~
+```
 
-## Supabase setup and migration notes
+## Database setup and changes
 
-The current live project already has the base tables, authentication setup, storage bucket and listing-approval migration applied.
+Both migrations are incremental and one-time. They require the original `pgs`, `pg_photos`, `profiles`, authentication and storage setup; this repo does not contain a complete empty-database bootstrap. For a new instance, obtain the base schema/policies/profile creation behavior from the project maintainer or backup, apply `listing-approval.sql`, then `images-admin.sql`, configure the public URL/key and provision an authorized admin.
 
-**listing-approval.sql is an incremental, one-time migration, not a complete empty-database installer.** It expects the existing pgs, pg_photos and profiles schema and Supabase auth roles. It adds pgs.photo_urls and creates new objects without IF NOT EXISTS guards for those objects. Do not run it again on the current database.
+For admin provisioning, identify the intended Authentication user, ensure a matching `profiles` record, then add their UUID to `pg_admins` in a trusted database session. Never disable RLS to work around access failures. Password setup/recovery is handled separately through Supabase Authentication; this site has no password-reset UI.
 
-For a separate development instance, first obtain the base schema, policies, profile creation behavior and storage setup from the project maintainer or a database backup. Recreate those dependencies, then apply listing-approval.sql once in the Supabase SQL Editor. Update supabase-config.js with the new project's URL and publishable key and provision an authorized admin user/profile/membership. The original base-schema migration is not included in this repository; old comments mentioning 01_schema.sql do not mean that file is present.
+Future changes should use new reviewed migration files. Vercel does not execute SQL files. Source control is not a backup of listings, requests, accounts or uploaded objects. Preserve database/storage backups separately. Review SQL tests before running; `verification.sql` uses a project-specific admin identity and rollback-only fixtures, not production content.
 
-Source control does not back up live listings, users, requests or storage objects. Keep database/storage backups separately. Future database changes should be recorded as new reviewed SQL migrations; a Vercel deployment does not execute SQL files automatically.
+## Deployment and troubleshooting
 
-## Vercel deployment
+The existing Vercel project `pg-finder` in Tejas's workspace tracks `Tejas-4t/PG-FINDER`, branch `main`. Commit frontend changes and verify the deployment is **Ready**, then reload the public URL. It is a static/Other project serving the repo root without build/install commands. Public Supabase configuration comes from `supabase-config.js`, not Vercel environment variables. A frontend rollback does not undo database changes.
 
-The current Vercel project is pg-finder in the Tejas workspace and is connected to Tejas-4t/PG-FINDER, production branch main.
-
-For the existing deployment, commit frontend changes to main and check that the Vercel deployment reports Ready. Open the production URL to verify the changed behavior. The project serves files from the repository root as a static site; no framework build is required.
-
-For a new deployment, import the repository into Vercel, use its static/Other setup with the repository root as the site source, and leave build/install commands unset unless the project is later changed to use a build tool. Browser Supabase configuration currently comes from supabase-config.js, not from Vercel environment variables.
-
-A frontend rollback in Vercel does not undo Supabase migrations or data changes. Keep the deployed frontend compatible with the database schema.
-
-## Verification and troubleshooting
-
-Checks performed for the approval release:
-
-- Both application JavaScript files passed Node syntax checks.
-- The browser loaded the three existing published properties and the new request/admin dialogs.
-- Form validation rejected availability greater than total beds and non-HTTPS photo links.
-- Database role tests verified visitor insertion, private request protection, blocked non-admin review and blocked self-admin grants.
-- Transactional tests verified admin approval publishes with photo URLs, rejection remains private, and repeat approval cannot create another property. Test records were rolled back.
-- Vercel reported the workflow release Ready and the public URL displayed the new navigation and footer.
-
-A real admin password sign-in and review through the browser still need to be exercised by the account holder; database-role tests do not establish that the account holder's password is known or usable.
-
-| Symptom | Check |
+| Problem | Check |
 | --- | --- |
-| Listings fail to load | Check browser console, project availability, Supabase URL/key, pgs columns, pg_photos relationship and SELECT policies. |
-| Request cannot be submitted | Check required fields, positive rent, available beds <= total beds, valid phone and 1–8 HTTPS photo links. Then inspect database errors/grants/RLS. |
-| Sign-in fails | Use the project's application user and its password, not dashboard login credentials. Check the user in Supabase Authentication. |
-| Signed in but no admin access | Check pg_admins contains exactly that auth user's UUID. |
-| Approval fails | Confirm the admin has a profiles row, the trigger/migration exists, and the property satisfies the pgs constraints. Refresh the queue before retrying. |
-| Photo does not display | Open the link directly: it must be public, remain accessible and ideally serve an image rather than HTML. |
-| Deployment does not show edits | Check the Vercel source commit and Ready status, then reload the production page. |
+| Listings fail to load | Supabase availability, public URL/key, columns/relationships and RLS. Do not rerun historical migrations blindly. |
+| Upload validation fails | At most three total images, each upload at most 5 MB, accepted format, valid image contents. |
+| Submission stalls/fails | Keep the tab open and Retry Upload. Check connection, bucket availability/quota and storage policies. Incomplete uploads cannot be approved. |
+| Photo is unavailable | For external links, use a direct public image URL. For uploads, refresh signed URLs and inspect bucket permissions/object existence. |
+| Admin sign-in fails | Use the application user's email/password, not the Supabase dashboard login. |
+| Signed in without access | Check the exact auth UUID in `pg_admins`. |
+| Approval fails | Check admin profile, request status, image completion and property constraints. |
+| Edit conflicts | Refresh and reopen the listing; someone changed it after it was loaded. |
+| Deleted listing missing | Check Manage Listings → Trash. Restore then explicitly republish from Edit. |
+| Deployment shows old UI | Verify Vercel's source commit and Ready status, then reload. |
 
-## Current scope and limits
+## Scope and limits
 
-- Public browsing and pending listing submission require no owner account.
-- Photos are external links; upload management is not implemented.
-- Pending/approved/rejected admin views show at most the latest 100 requests in that category; process pending items and refresh to reveal older ones.
-- The homepage loads at most 60 published PGs. Pagination and realtime updates are not implemented.
-- The hero's Location, Budget and Room Type summaries are not editable search fields. Quick-filter buttons provide the implemented filtering.
-- Hearts toggle visually during the current page session; saved accounts/favourites and a comparison workflow are not implemented.
-- There are no approval emails, submission-status lookup, owner dashboard, payments or booking workflow.
-- The form has a honeypot and validation, but no server-side rate limiter or CAPTCHA. Consider abuse controls before promoting the submission form widely.
-- The repo does not currently include a complete automated test suite or a full database bootstrap/backup.
+The homepage loads up to 60 published properties; admin category views show up to 100 records. Pagination/realtime updates are not implemented. The hero location/budget/sharing summaries are informational; quick-filter buttons provide filtering. Hearts are temporary visual toggles. There are no booking/payment workflows, owner dashboard, notification emails, favourites accounts, comparison workflow or submission-status lookup.
 
-When extending this project, keep private request data separate from public property data and test permissions as visitor, non-admin and admin. Update this README and preserve migrations alongside application changes.
+When extending this project, keep private submission data separate from public property data, test visitor/non-admin/admin permissions, and update this file with migrations and behavior changes.

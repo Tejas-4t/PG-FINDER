@@ -57,7 +57,7 @@ let db = null;
 const PG_COLUMNS =
     "id, name, description, address, area, city, contact_phone, " +
     "monthly_rent, sharing_type, facilities, total_beds, available_beds, " +
-    "is_verified, rating, created_at, photo_urls, " +
+    "is_verified, rating, created_at, updated_at, photo_urls, photo_paths, " +
     "pg_photos ( storage_path, sort_order )";
 
 const SHARING_LABELS = {
@@ -107,7 +107,7 @@ function formatRent(amount) {
 }
 
 function sortedPhotos(pg) {
-    return (pg.photo_urls || []).filter(safePhotoUrl).map(function(url, index) { return { external_url: url, sort_order: index }; }).concat(pg.pg_photos.slice().sort(function(a, b) {
+    return (pg.photo_urls || []).filter(safePhotoUrl).map(function(url, index) { return { external_url: url, sort_order: index }; }).concat(pg.uploaded_photos || []).concat((pg.pg_photos || []).slice().sort(function(a, b) {
         return a.sort_order - b.sort_order;
     }));
 }
@@ -177,15 +177,7 @@ function showDetails(pg) {
         </a>
     `;
 
-    const gallery = document.createElement("div");
-    gallery.className = "photo-gallery";
-    sortedPhotos(pg).forEach(function(photo) {
-        const img = document.createElement("img");
-        img.src = photo.external_url || photoUrl(photo.storage_path);
-        img.alt = pg.name + " photo"; img.loading = "lazy"; img.referrerPolicy = "no-referrer";
-        gallery.appendChild(img);
-    });
-    document.getElementById("pgDetailsBody").appendChild(gallery);
+    document.getElementById("pgDetailsBody").prepend(createPhotoCarousel(sortedPhotos(pg), pg.name));
     detailsModal.classList.add("show");
 
 }
@@ -270,15 +262,10 @@ function buildCard(pg, index) {
         </div>
     `;
 
-    // Cover photo from Supabase Storage (if the PG has photos)
-    if (photos.length) {
-
-        const url = (photos[0].external_url || photoUrl(photos[0].storage_path)).replace(/"/g, "%22");
-
-        card.querySelector(".image-area").style.backgroundImage =
-            'linear-gradient(180deg, transparent 50%, rgba(0, 0, 0, 0.5)), url("' + url + '")';
-
-    }
+    const imageArea = card.querySelector('.image-area');
+    imageArea.classList.remove(...FALLBACK_IMAGE_CLASSES);
+    imageArea.querySelector('.image-bottom')?.remove();
+    imageArea.prepend(createPhotoCarousel(photos, pg.name, true));
 
     // Heart (not saved yet - saved favourites come in a later stage)
     const heart = card.querySelector(".heart");
@@ -451,6 +438,7 @@ async function loadPGs() {
             .from("pgs")
             .select(PG_COLUMNS)
             .eq("is_published", true)
+            .is("deleted_at", null)
             .order("created_at", { ascending: false })
             .order("name", { ascending: true })
             .limit(60);
@@ -471,6 +459,7 @@ async function loadPGs() {
             });
         });
 
+        await resolvePGImages(allPGs);
         pgsLoaded = true;
 
         console.log("[PG Finder] Loaded " + allPGs.length + " PG(s) from Supabase.");

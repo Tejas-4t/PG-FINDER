@@ -1,7 +1,6 @@
 // Listing requests are insert-only for visitors. Supabase enforces admin approval.
 (function () {
     'use strict';
-    let previousFocus = null;
     function makeDialog(id, title, contents, className) {
         const modal = document.createElement('div');
         modal.id = id; modal.className = 'custom-modal';
@@ -21,13 +20,13 @@
         return modal;
     }
     function open(modal) {
-        previousFocus = document.activeElement;
+        modal.previousFocus = document.activeElement;
         modal.classList.add('show'); document.body.style.overflow = 'hidden';
         modal.querySelector('input,button').focus();
     }
     function close(modal) {
-        modal.classList.remove('show'); document.body.style.overflow = '';
-        if (previousFocus && previousFocus.isConnected) previousFocus.focus();
+        modal.classList.remove('show'); document.body.style.overflow = document.querySelector('.custom-modal.show') ? 'hidden' : '';
+        if (modal.previousFocus && modal.previousFocus.isConnected) modal.previousFocus.focus();
     }
     function message(el, text, isError = false) { el.textContent = text; el.classList.toggle('error', isError); }
     function input(id, label, type, attributes = '') {
@@ -53,8 +52,8 @@
           </div></fieldset>
           <fieldset><legend>Facilities</legend><div class="facility-options">${Object.entries(FACILITY_LABELS).map(([value, label]) => '<label><input type="checkbox" name="facility" value="' + value + '">' + label + '</label>').join('')}</div></fieldset>
           <label for="requestDescription">Description</label><textarea id="requestDescription" name="requestDescription" maxlength="2000" rows="3" placeholder="Food, house rules, nearby landmarks and what makes your PG special"></textarea>
-          <label for="requestPhotos">Photo links</label><textarea id="requestPhotos" name="requestPhotos" rows="3" maxlength="16384" required placeholder="https://example.com/room.jpg"></textarea>
-          <p class="field-help">Add 1–8 public HTTPS photo links, one per line. Direct image links work best. Make sure you have permission to share them.</p>
+          <label for="requestFiles">Upload photos</label><input id="requestFiles" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/bmp" multiple><div id="requestPreview" class="upload-preview"></div><label for="requestPhotos">Or add photo links</label><textarea id="requestPhotos" name="requestPhotos" rows="3" maxlength="6144" placeholder="https://example.com/room.jpg"></textarea>
+          <p class="field-help">Add 1–3 images in total using uploads, HTTPS links, or both. Maximum 5 MB per uploaded image. JPEG, PNG, WebP, GIF, AVIF and BMP are supported. Uploads are resized and saved as WebP; animated images become still photos. Only share images you have permission to publish.</p>
           <div class="spam-trap" aria-hidden="true"><label for="requestWebsite">Leave blank</label><input id="requestWebsite" name="requestWebsite" tabindex="-1" autocomplete="off"></div>
           <label><input type="checkbox" id="requestConsent" required> I confirm these details are accurate and may be published, including the address, listing contact number and photos, after approval.</label>
           <div class="form-status" id="requestStatus" role="status" aria-live="polite"></div>
@@ -62,18 +61,34 @@
         </form>`, 'listing-dialog');
     const requestForm = document.getElementById('listingRequestForm');
     const requestStatus = document.getElementById('requestStatus');
-    let requestId = crypto.randomUUID();
+    let requestId = crypto.randomUUID(), requestDraft = null;
+    const requestFiles = document.getElementById('requestFiles');
+    let previewUrls = [];
+    requestFiles.addEventListener('change', () => {
+        previewUrls.forEach(URL.revokeObjectURL); previewUrls = [];
+        const preview = document.getElementById('requestPreview'); preview.replaceChildren();
+        try {
+            const links = document.getElementById('requestPhotos').value.split(/\r?\n/).filter(s=>s.trim());
+            validateImageFiles([...requestFiles.files], links.length);
+            [...requestFiles.files].forEach(file=>{const img=document.createElement('img');img.src=URL.createObjectURL(file);previewUrls.push(img.src);img.alt=file.name;preview.appendChild(img);});
+            message(requestStatus, '');
+        } catch(error) { message(requestStatus, error.message, true); requestFiles.value=''; }
+    });
     document.querySelectorAll('[data-open-listing]').forEach(button => button.addEventListener('click', () => open(listingModal)));
     requestForm.addEventListener('submit', async event => {
         event.preventDefault();
         const button = requestForm.querySelector('[type=submit]');
         if (button.disabled) return;
         const f = new FormData(requestForm);
+        const files = [...requestFiles.files];
         const photos = [...new Set(String(f.get('requestPhotos')).split(/\r?\n/).map(s => s.trim()).filter(Boolean))];
-        if (photos.length < 1 || photos.length > 8 || photos.some(url => !safePhotoUrl(url) || url.length > 2048)) {
-            message(requestStatus, 'Add 1–8 valid public HTTPS photo links, one per line.', true); return;
+        if (!requestDraft) {
+            try {
+                validateImageFiles(files, photos.length);
+                if (photos.length + files.length < 1 || photos.some(url=>!safePhotoUrl(url)||url.length>2048)) throw new Error('Add 1–3 images using uploads or valid HTTPS image links.');
+            } catch(error) { message(requestStatus,error.message,true);return; }
         }
-        if (Number(f.get('requestAvailableBeds')) > Number(f.get('requestTotalBeds'))) {
+        if (!requestDraft && Number(f.get('requestAvailableBeds')) > Number(f.get('requestTotalBeds'))) {
             message(requestStatus, 'Available beds cannot exceed total beds.', true); return;
         }
         if (f.get('requestWebsite')) { message(requestStatus, 'Unable to submit this request.', true); return; }
@@ -87,14 +102,25 @@
             description: String(f.get('requestDescription')).trim(), photo_urls: photos
         };
         try {
-            const {error} = await db.from('pg_listing_requests').insert(payload).abortSignal(AbortSignal.timeout(20000));
+            if (!requestDraft) {
+                message(requestStatus, 'Preparing photos…');
+                const blobs = await prepareImages(files);
+                payload.photo_paths = blobs.map((_,i)=>requestId+'/'+(i+1)+'.webp');
+                requestDraft = {payload, blobs, completed:new Set()};
+                requestForm.querySelectorAll('input,textarea,select').forEach(el=>el.disabled=true);
+            }
+            message(requestStatus, 'Sending details and uploading photos…');
+            const {error} = await db.from('pg_listing_requests').insert(requestDraft.payload).abortSignal(AbortSignal.timeout(20000));
             if (error && error.code !== '23505') throw error;
-            message(requestStatus, 'Request received. Your PG is awaiting admin approval and is not public yet. Reference: ' + requestId.slice(0, 8));
-            requestForm.reset(); requestId = crypto.randomUUID();
+            await uploadPGImages(requestDraft.payload.photo_paths, requestDraft.blobs, requestDraft.completed);
+            message(requestStatus, 'Request received with all photos. Your PG is awaiting admin approval. Reference: ' + requestId.slice(0, 8));
+            requestForm.querySelectorAll('input,textarea,select').forEach(el=>el.disabled=false);
+            requestForm.reset(); requestId = crypto.randomUUID(); requestDraft=null;
+            previewUrls.forEach(URL.revokeObjectURL); previewUrls=[];document.getElementById('requestPreview').replaceChildren();
         } catch (error) {
             console.error('[PG Finder] Submission failed', error);
-            message(requestStatus, 'We could not confirm your request. Please check the details and connection, then retry. Your form has been kept.', true);
-        } finally { button.disabled = false; button.textContent = 'Send for Approval'; }
+            message(requestStatus, requestDraft ? 'Could not finish submitting. Your details and photos are kept in this tab. Check your connection and press Retry Upload; do not close this tab.' : error.message || 'Could not prepare these photos. Please choose another image.', true);
+        } finally { button.disabled = false; button.textContent = requestDraft ? 'Retry Upload' : 'Send for Approval'; }
     });
 
     const adminModal = makeDialog('adminPanel', 'Admin Login', `
@@ -107,16 +133,16 @@
         </div>
         <div class="form-status" id="adminStatus" role="status" aria-live="polite"></div>
         <section id="adminQueue" hidden>
-          <div class="admin-toolbar"><label for="requestFilter">Requests</label><select id="requestFilter"><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select><button id="refreshRequests" type="button">Refresh</button><button id="adminSignOut" type="button">Sign Out</button></div>
+          <div class="admin-mode"><button type="button" id="showRequests">Listing Requests</button><button type="button" id="showListings">Manage Listings</button></div><div class="admin-toolbar"><label for="requestFilter" id="filterLabel">Requests</label><select id="requestFilter"><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select><button id="refreshRequests" type="button">Refresh</button><button id="adminSignOut" type="button">Sign Out</button></div>
           <div id="reviewRequests" aria-live="polite"></div>
         </section>`, 'admin-dialog');
     const adminStatus = document.getElementById('adminStatus');
     const queue = document.getElementById('adminQueue');
     const signIn = document.getElementById('adminSignIn');
     const reviewList = document.getElementById('reviewRequests');
-    let adminUserId = null, refreshVersion = 0;
+    let adminUserId = null, refreshVersion = 0, adminMode = 'requests';
     function resetAdmin() {
-        adminUserId = null; refreshVersion++; queue.hidden = true; signIn.hidden = false; reviewList.replaceChildren();
+        adminUserId = null; if (editor) { editor.remove(); editor=null; } refreshVersion++; queue.hidden = true; signIn.hidden = false; reviewList.replaceChildren();
         document.getElementById('adminPassword').value = '';
         document.getElementById('adminPanel-title').textContent = 'Admin Login';
     }
@@ -128,7 +154,7 @@
         if (result.error) throw result.error;
         if (!result.data) { resetAdmin(); message(adminStatus, 'This account does not have admin access.', true); return false; }
         adminUserId = user.id; queue.hidden = false; signIn.hidden = true;
-        document.getElementById('adminPanel-title').textContent = 'Listing Approvals';
+        document.getElementById('adminPanel-title').textContent = 'Admin Panel';
         document.getElementById('adminPassword').value = '';
         return true;
     }
@@ -160,6 +186,7 @@
 
     async function loadRequests() {
         if (!adminUserId) return;
+        if (adminMode === 'listings') return loadManagedListings();
         const version = ++refreshVersion;
         reviewList.textContent = 'Loading requests…';
         try {
@@ -168,6 +195,8 @@
             if (version !== refreshVersion || !adminUserId) return;
             reviewList.replaceChildren();
             if (!data.length) { reviewList.innerHTML = '<p class="admin-empty">No requests in this category.</p>'; return; }
+            await resolvePGImages(data);
+            if (version !== refreshVersion || !adminUserId) return;
             data.forEach(renderRequest);
             if (data.length === 100) { const note = document.createElement('p'); note.textContent = 'Showing the latest 100 requests. Review these and refresh to see older pending requests.'; reviewList.appendChild(note); }
         } catch (error) { if (version === refreshVersion) reviewList.textContent = 'Could not load requests. Use Refresh to try again.'; }
@@ -176,10 +205,9 @@
         const card = document.createElement('article'); card.className = 'request-card';
         const fields = [['Requested by', request.requester_name], ['Private email', request.requester_email], ['Public phone', request.contact_phone], ['Address', [request.address,request.area,request.city].join(', ')], ['Rent', formatRent(request.monthly_rent) + ' / month'], ['Room', SHARING_LABELS[request.sharing_type]], ['Beds', request.available_beds + ' available / ' + request.total_beds + ' total'], ['Submitted', new Date(request.created_at).toLocaleString()]];
         card.innerHTML = `<span class="status-badge">${esc(request.status)}</span><h3>${esc(request.name)}</h3><dl class="request-meta">${fields.map(([label,value]) => '<div><dt>' + esc(label) + '</dt><dd>' + esc(value) + '</dd></div>').join('')}</dl><p>${request.facilities.map(value => esc(FACILITY_LABELS[value] || value)).join(' · ')}</p><p>${esc(request.description)}</p><div class="photo-links"></div>`;
-        (request.photo_urls || []).filter(safePhotoUrl).forEach((url, index) => {
-            const link = document.createElement('a'); link.href = url; link.textContent = 'View photo ' + (index + 1); link.target = '_blank'; link.rel = 'noopener noreferrer';
-            card.querySelector('.photo-links').appendChild(link);
-        });
+        card.querySelector('.photo-links').appendChild(createPhotoCarousel(sortedPhotos(request), request.name));
+        const missingPhotos = (request.uploaded_photos || []).some(photo=>photo.unavailable);
+        if (missingPhotos) { const warning=document.createElement('p'); warning.textContent='Photo upload incomplete or preview unavailable. Refresh before approving.'; warning.className='form-status error';card.appendChild(warning); }
         if (request.status === 'pending') {
             const noteLabel = document.createElement('label'); noteLabel.textContent = 'Review notes (optional)';
             const notes = document.createElement('textarea'); notes.id = 'notes-' + request.id; notes.maxLength = 1000; notes.rows = 2; noteLabel.htmlFor = notes.id;
@@ -187,6 +215,7 @@
             const status = document.createElement('div'); status.className = 'form-status'; status.setAttribute('role','status');
             ['approved','rejected'].forEach(decision => {
                 const button = document.createElement('button'); button.type = 'button'; button.textContent = decision === 'approved' ? 'Approve & Publish' : 'Reject'; button.className = decision === 'rejected' ? 'reject' : '';
+                if (decision === 'approved' && missingPhotos) button.disabled=true;
                 button.addEventListener('click', async () => {
                     actions.querySelectorAll('button').forEach(b => b.disabled = true); message(status, 'Saving…');
                     try {
@@ -204,5 +233,83 @@
             const reviewed = document.createElement('p'); reviewed.textContent = 'Reviewed ' + new Date(request.reviewed_at).toLocaleString() + (request.review_notes ? ' · ' + request.review_notes : ''); card.appendChild(reviewed);
         }
         reviewList.appendChild(card);
+    }
+    function setAdminMode(mode) {
+        adminMode=mode;
+        const filter=document.getElementById('requestFilter');
+        filter.innerHTML=mode==='requests' ? '<option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option>' : '<option value="active">Active listings</option><option value="trash">Trash</option>';
+        document.getElementById('filterLabel').textContent=mode==='requests'?'Requests':'Listings';
+        loadRequests();
+    }
+    document.getElementById('showRequests').addEventListener('click',()=>setAdminMode('requests'));
+    document.getElementById('showListings').addEventListener('click',()=>setAdminMode('listings'));
+    async function loadManagedListings() {
+        const version=++refreshVersion; reviewList.textContent='Loading listings…';
+        try {
+            const trash=document.getElementById('requestFilter').value==='trash';
+            let query=db.from('pgs').select(PG_COLUMNS+',is_published,deleted_at').order('created_at',{ascending:false}).limit(100);
+            query=trash?query.not('deleted_at','is',null):query.is('deleted_at',null);
+            const {data,error}=await query.abortSignal(AbortSignal.timeout(20000));if(error)throw error;
+            await resolvePGImages(data);
+            if(version!==refreshVersion || !adminUserId)return;
+            reviewList.replaceChildren();
+            if(!data.length)reviewList.textContent=trash?'Trash is empty.':'No listings.';
+            data.forEach(pg=>{
+                const card=document.createElement('article');card.className='request-card';
+                card.innerHTML='<span class="status-badge">'+(trash?'Trash':pg.is_published?'Published':'Unpublished')+'</span><h3>'+esc(pg.name)+'</h3><p>'+formatRent(pg.monthly_rent)+' / month · '+esc(pg.area)+'</p><div class="manage-actions"></div>';
+                card.prepend(createPhotoCarousel(sortedPhotos(pg),pg.name));
+                const actions=card.querySelector('.manage-actions');
+                function action(label,handler){const button=document.createElement('button');button.type='button';button.textContent=label;button.addEventListener('click',handler);actions.appendChild(button);return button;}
+                if(!trash) {
+                    action('View',()=>{close(adminModal);showDetails(pg);});
+                    action('Edit',()=>editPG(pg));
+                }
+                action(trash?'Restore':'Delete',async()=>{
+                    if(!confirm(trash?'Restore '+pg.name+' as unpublished? You can publish it from Edit.':'Move '+pg.name+' to Trash? It will disappear from the website and can be restored by an admin.'))return;
+                    actions.querySelectorAll('button').forEach(b=>b.disabled=true);
+                    try {const {error}=await db.rpc('admin_trash_pg',{pg_id:pg.id,expected_updated_at:pg.updated_at,restore:trash});if(error)throw error;message(adminStatus,trash?'Restored as unpublished. Use Edit to publish.':'Listing moved to Trash.');await loadRequests();await loadPGs();}
+                    catch(error){message(adminStatus,error.message || 'Could not update listing. Refresh and retry.',true);actions.querySelectorAll('button').forEach(b=>b.disabled=false);}
+                }).className='danger-button';
+                reviewList.appendChild(card);
+            });
+            if(data.length===100){const note=document.createElement('p');note.textContent='Showing the latest 100 listings in this view.';reviewList.appendChild(note);}
+        } catch(error){if(version===refreshVersion)reviewList.textContent='Could not load listings. Refresh to retry.';}
+    }
+    let editor=null;
+    function editPG(pg) {
+        if(editor)editor.remove();
+        const fields=[['name','PG name','text','minlength="2" maxlength="100"'],['contact_phone','Public contact number','tel','pattern="[+]?[0-9 ]{10,15}"'],['address','Full address','text','minlength="5" maxlength="500"'],['area','Area','text','minlength="2" maxlength="100"'],['city','City','text','minlength="2" maxlength="100"'],['monthly_rent','Monthly rent (₹)','number','min="1" max="1000000"'],['total_beds','Total beds','number','min="1" max="10000"'],['available_beds','Available beds','number','min="0" max="10000"']];
+        editor=makeDialog('editPG','Edit Listing','<form id="editPGForm"><div class="form-grid">'+fields.map(([key,label,type,attrs])=>input('edit-'+key,label,type,attrs)).join('')+'</div><label for="edit-sharing">Room type</label><select id="edit-sharing">'+Object.entries(SHARING_LABELS).map(([value,label])=>'<option value="'+value+'">'+label+'</option>').join('')+'</select><fieldset><legend>Facilities</legend><div class="facility-options">'+Object.entries(FACILITY_LABELS).map(([value,label])=>'<label><input type="checkbox" name="editFacility" value="'+value+'">'+label+'</label>').join('')+'</div></fieldset><label for="edit-description">Description</label><textarea id="edit-description" maxlength="2000" rows="3"></textarea><label><input type="checkbox" id="edit-published"> Published on homepage</label><h3>Photos</h3><div id="edit-retained"></div><label for="edit-files">Add photos (maximum 3 total, 5 MB each)</label><input id="edit-files" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/bmp"><label for="edit-links">Add HTTPS image links, one per line</label><textarea id="edit-links" maxlength="6144"></textarea><p class="field-help">Remove an existing photo to replace it. Uploaded photos are compressed to WebP.</p><div id="edit-status" class="form-status" role="status"></div><button type="submit" class="modal-main-btn">Save Changes</button></form>','edit-dialog');
+        editor.classList.add('edit-layer');
+        fields.forEach(([key])=>document.getElementById('edit-'+key).value=pg[key]);
+        document.getElementById('edit-sharing').value=pg.sharing_type;
+        document.getElementById('edit-description').value=pg.description||'';
+        document.getElementById('edit-published').checked=pg.is_published;
+        editor.querySelectorAll('[name=editFacility]').forEach(el=>el.checked=pg.facilities.includes(el.value));
+        const retained=[...(pg.photo_urls||[]).map(url=>({url})),...(pg.photo_paths||[]).map(path=>({path,url:(pg.uploaded_photos||[]).find(p=>p.storage_path===path)?.external_url}))];
+        function drawRetained(){const list=document.getElementById('edit-retained');list.replaceChildren();retained.forEach((photo,index)=>{const row=document.createElement('div');row.className='retained-photo';const img=document.createElement('img');if(photo.url)img.src=photo.url;img.alt='Existing image '+(index+1);img.referrerPolicy='no-referrer';const button=document.createElement('button');button.type='button';button.textContent='Remove image '+(index+1);button.addEventListener('click',()=>{retained.splice(index,1);drawRetained();});row.append(img,button);list.appendChild(row);});}
+        drawRetained();open(editor);
+        const form=document.getElementById('editPGForm'),status=document.getElementById('edit-status');
+        document.getElementById('edit-files').addEventListener('change',()=>{try{validateImageFiles([...document.getElementById('edit-files').files],retained.length);message(status,'');}catch(error){message(status,error.message,true);document.getElementById('edit-files').value='';}});
+        form.addEventListener('submit',async event=>{
+            event.preventDefault();const button=form.querySelector('[type=submit]');if(button.disabled)return;
+            button.disabled=true;
+            try{
+                const details={};fields.forEach(([key,,type])=>{const value=document.getElementById('edit-'+key).value.trim();details[key]=type==='number'?Number(value):value;});
+                if(details.available_beds>details.total_beds)throw new Error('Available beds cannot exceed total beds.');
+                details.sharing_type=document.getElementById('edit-sharing').value;details.description=document.getElementById('edit-description').value.trim();details.is_published=document.getElementById('edit-published').checked;details.facilities=[...editor.querySelectorAll('[name=editFacility]:checked')].map(el=>el.value);
+                const links=[...new Set(document.getElementById('edit-links').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean))];
+                if(links.some(url=>!safePhotoUrl(url)||url.length>2048))throw new Error('Use valid HTTPS image links.');
+                const files=[...document.getElementById('edit-files').files];validateImageFiles(files,retained.length+links.length);
+                if(retained.length+links.length+files.length<1)throw new Error('Keep at least one image.');
+                message(status,'Preparing and uploading photos…');
+                const blobs=await prepareImages(files),folder=crypto.randomUUID(),paths=blobs.map((_,i)=>folder+'/'+(i+1)+'.webp');
+                await uploadPGImages(paths,blobs);
+                details.photo_urls=retained.filter(photo=>!photo.path).map(photo=>photo.url).concat(links);details.photo_paths=retained.filter(photo=>photo.path).map(photo=>photo.path).concat(paths);
+                const {error}=await db.rpc('admin_save_pg',{pg_id:pg.id,expected_updated_at:pg.updated_at,details});if(error)throw error;
+                close(editor);message(adminStatus,'Listing updated: '+pg.name);await loadRequests();await loadPGs();
+            }catch(error){message(status,error.message || 'Could not save changes. Refresh before retrying.',true);}
+            finally{button.disabled=false;}
+        });
     }
 })();
